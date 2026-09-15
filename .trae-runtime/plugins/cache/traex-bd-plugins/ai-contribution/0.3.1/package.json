@@ -1,0 +1,15 @@
+{
+  "name": "traex-ai-contribution",
+  "version": "0.3.1",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "node test/run_tests.js"
+  },
+  "dependencies": {
+    "@ai-server/contribution-sdk": "3.0.1-alpha.101",
+    "@dp/tea-sdk-node": "3.0.10"
+  },
+  "devDependencies": { "esbuild": "0.25.9" }
+}

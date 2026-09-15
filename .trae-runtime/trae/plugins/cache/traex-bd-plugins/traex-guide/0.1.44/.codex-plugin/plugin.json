@@ -1,0 +1,11 @@
+{
+  "name": "traex-guide",
+  "version": "0.1.44",
+  "description": "Guide TraeX on common CLI/TUI usage, logs, configuration, plugins, skills, MCP setup, and troubleshooting entry points.",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "TraeX Guide",
+    "shortDescription": "TraeX commands, paths, plugins, skills, MCP, logs, and troubleshooting guide",
+    "category": "Productivity"
+  }
+}

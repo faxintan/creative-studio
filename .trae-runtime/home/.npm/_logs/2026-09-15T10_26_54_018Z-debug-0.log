@@ -1,0 +1,18 @@
+0 verbose cli /Users/bytedance/.local/bin/node/bin/node /Users/bytedance/.local/bin/node/bin/npm
+1 info using npm@11.6.1
+2 info using node@v24.10.0
+3 silly config load:file:/Users/bytedance/.local/bin/node/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/bytedance/Desktop/github/creative-studio/.npmrc
+5 silly config load:file:/Users/bytedance/Desktop/github/creative-studio/.trae-runtime/home/.npmrc
+6 silly config load:file:/Users/bytedance/.local/bin/node/etc/npmrc
+7 verbose title npm run dev:bridge
+8 verbose argv "run" "dev:bridge"
+9 verbose logfile logs-max:10 dir:/Users/bytedance/Desktop/github/creative-studio/.trae-runtime/home/.npm/_logs/2026-09-15T10_26_54_018Z-
+10 verbose logfile /Users/bytedance/Desktop/github/creative-studio/.trae-runtime/home/.npm/_logs/2026-09-15T10_26_54_018Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /Users/bytedance/Desktop/github/creative-studio
+13 verbose os Darwin 24.6.0
+14 verbose node v24.10.0
+15 verbose npm  v11.6.1
+16 verbose exit 1
+17 verbose code 1

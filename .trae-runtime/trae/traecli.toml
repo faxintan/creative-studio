@@ -1,0 +1,7 @@
+[marketplaces.traex-bd-plugins]
+auto_update = true
+last_updated = "2026-09-15T10:19:19Z"
+ref = "main"
+source = "git@code.byted.org:ide/traex-bd-plugins.git"
+source_type = "git"
+last_revision = "0ce0a994b2892123a10319f3fd7f44946933d850"

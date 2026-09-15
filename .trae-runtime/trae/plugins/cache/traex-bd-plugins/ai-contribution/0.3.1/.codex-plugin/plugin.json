@@ -1,0 +1,12 @@
+{
+  "name": "ai-contribution",
+  "version": "0.3.1",
+  "description": "Report AI code contributions with bounded runtime storage and safe cache cleanup",
+  "hooks": "./hooks.json",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AI Contribution",
+    "shortDescription": "Report AI contributions and keep local cache bounded",
+    "category": "Analytics"
+  }
+}

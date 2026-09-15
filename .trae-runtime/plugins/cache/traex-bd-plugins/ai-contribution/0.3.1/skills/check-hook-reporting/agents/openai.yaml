@@ -1,0 +1,4 @@
+interface:
+  display_name: "检查 AI 代码上报"
+  short_description: "只读核对 AI 代码采集、生产投递、缓存清理与看板归因证据"
+  default_prompt: "使用 $check-hook-reporting 检查当前 TraeX 会话的 AI 代码上报情况，区分采集、入队、生产接收和最终看板归因，并核对缓存清理状态。"

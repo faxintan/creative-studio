@@ -1,0 +1,2 @@
+# Preserve significant whitespace inside the SDK's generated template literals.
+vendor/reporter.cjs -whitespace linguist-generated=true

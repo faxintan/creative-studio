@@ -1,0 +1,24 @@
+{
+  "name": "creative-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n bridge,web -c yellow,cyan \"npm:dev:bridge\" \"npm:dev:web\"",
+    "dev:web": "vite --host 127.0.0.1 --port 5173",
+    "dev:bridge": "tsx src/bridge/server.ts",
+    "check": "tsc --noEmit",
+    "build": "npm run check && vite build"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.13",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.1"
+  }
+}

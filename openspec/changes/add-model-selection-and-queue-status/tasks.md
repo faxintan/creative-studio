@@ -38,9 +38,9 @@
 
 ## 7. Startup Recovery and Port Reuse
 
-- [ ] 7.1 Make the Bridge push a model catalog snapshot immediately after an accepted WebSocket connection, retain idempotent get/refresh commands, and verify a newly connected client receives the full catalog without an extra UI action.
-- [ ] 7.2 Adjust catalog discovery timeout and error normalization for slow CLI startup and stderr warnings; verify valid stdout still produces a complete snapshot and slow/failing discovery produces an actionable error.
-- [ ] 7.3 Add browser recovery handling for catalog command rejection, protocol mismatch, and bounded retry; verify the selector cannot remain indefinitely on `Loading models...`.
-- [ ] 7.4 Add a project-owned development Bridge launcher that identifies and terminates only a previous project Bridge on the configured port, forwards signals, and reports unrelated port occupants without an unhandled `EADDRINUSE` stack trace.
-- [ ] 7.5 Add controlled Bridge listen-error handling and verify repeated `pnpm dev` startup replaces the stale Bridge, keeps Vite running, and serves the current protocol.
-- [ ] 7.6 Run focused startup/catalog/launcher checks plus `npm run check` and `npm run build`; verify model bootstrap, slow CLI recovery, protocol mismatch messaging, and repeated one-click startup.
+- [x] 7.1 Make the Bridge push a model catalog snapshot immediately after an accepted WebSocket connection, retain idempotent get/refresh commands, and verify a newly connected client receives the full catalog without an extra UI action.
+- [x] 7.2 Adjust catalog discovery timeout and error normalization for slow CLI startup and stderr warnings; verify valid stdout still produces a complete snapshot and slow/failing discovery produces an actionable error.
+- [x] 7.3 Add browser recovery handling for catalog command rejection, protocol mismatch, and bounded retry; verify the selector cannot remain indefinitely on `Loading models...`.
+- [x] 7.4 Add a project-owned development Bridge launcher that identifies and terminates only a previous project Bridge on the configured port, forwards signals, and reports unrelated port occupants without an unhandled `EADDRINUSE` stack trace.
+- [x] 7.5 Add controlled Bridge listen-error handling and verify repeated `pnpm dev` startup replaces the stale Bridge, keeps Vite running, and serves the current protocol.
+- [x] 7.6 Run focused startup/catalog/launcher checks plus `npm run check` and `npm run build`; verify model bootstrap, slow CLI recovery, protocol mismatch messaging, and repeated one-click startup.

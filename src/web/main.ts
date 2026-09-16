@@ -32,6 +32,7 @@ interface UiState {
   modelCatalogStale: boolean;
   modelCatalogMessage: string;
   selectedModelId?: string;
+  modelCatalogTimer?: number;
   activeRunId?: string;
   activeAssistantMessageId?: string;
 }
@@ -171,8 +172,7 @@ refreshModelsButton.addEventListener("click", () => {
   if (state.connectionState !== "connected") {
     return;
   }
-  state.modelCatalogState = "loading";
-  state.modelCatalogMessage = "Refreshing models";
+  requestModelCatalog(true);
   renderModelControls();
   bridge.send({ type: "refresh_models" });
 });
@@ -255,15 +255,16 @@ function handleBridgeEvent(event: BridgeEvent): void {
       state.runtime = event.runtime;
       state.statusMessage = event.message ?? event.state;
       if (event.state === "connected") {
-        state.modelCatalogState = "loading";
-        state.modelCatalogMessage = "Loading models";
+        requestModelCatalog(false);
         bridge.send({ type: "get_models" });
       }
       break;
     case "models_snapshot":
+      clearModelCatalogTimer();
       applyModelSnapshot(event.snapshot);
       break;
     case "models_error":
+      clearModelCatalogTimer();
       if (event.staleSnapshot) {
         applyModelSnapshot(event.staleSnapshot);
       }
@@ -299,6 +300,14 @@ function handleBridgeEvent(event: BridgeEvent): void {
       finishAssistantMessage(event.runId, "failed", event.error);
       break;
     case "command_rejected":
+      if (state.modelCatalogState === "loading") {
+        clearModelCatalogTimer();
+        state.modelCatalogState = "error";
+        state.modelCatalogMessage =
+          event.error.code === "invalid_command"
+            ? "Bridge protocol is outdated. Restart the Bridge, then retry."
+            : event.error.details ?? event.error.message;
+      }
       upsertSystemError(event.error);
       break;
     case "pong":
@@ -565,6 +574,32 @@ function applyModelSnapshot(snapshot: ModelCatalogSnapshot): void {
   state.selectedModelId = resolveSelectedModelId(snapshot, state.selectedModelId);
   if (state.selectedModelId) {
     saveSelectedModelId(state.selectedModelId);
+  }
+}
+
+function requestModelCatalog(forceRefresh: boolean): void {
+  clearModelCatalogTimer();
+  state.modelCatalogState = "loading";
+  state.modelCatalogStale = false;
+  state.modelCatalogMessage = forceRefresh
+    ? "Refreshing models"
+    : "Loading models";
+  state.modelCatalogTimer = window.setTimeout(() => {
+    state.modelCatalogTimer = undefined;
+    if (state.modelCatalogState !== "loading") {
+      return;
+    }
+    state.modelCatalogState = "error";
+    state.modelCatalogMessage =
+      "Model discovery timed out. Refresh models to retry.";
+    render();
+  }, 15_000);
+}
+
+function clearModelCatalogTimer(): void {
+  if (state.modelCatalogTimer !== undefined) {
+    window.clearTimeout(state.modelCatalogTimer);
+    state.modelCatalogTimer = undefined;
   }
 }
 

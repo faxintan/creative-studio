@@ -60,6 +60,7 @@ wss.on("connection", (socket, request) => {
     runtime: runtimeSelection.availability.available ? runtime.kind : "unavailable",
     message: runtimeSelection.fallbackReason ?? runtimeSelection.availability.message,
   });
+  void sendModelCatalog(socket, session.id, modelCatalog, false);
 
   socket.on("message", (raw) => {
     void handleSocketMessage(socket, session, raw.toString(), runtime, modelCatalog);
@@ -78,6 +79,18 @@ server.listen(config.port, config.host, () => {
       `Protocol ${BRIDGE_PROTOCOL_VERSION}`,
     ].join("\n"),
   );
+});
+
+server.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(
+      `[bridge] port ${config.port} is already in use. ` +
+        "The development launcher should replace project-owned Bridge processes.",
+    );
+  } else {
+    console.error(`[bridge] failed to start: ${error.message}`);
+  }
+  process.exitCode = 1;
 });
 
 process.on("SIGINT", shutdown);

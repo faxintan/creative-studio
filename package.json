@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "concurrently -k -n bridge,web -c yellow,cyan \"npm:dev:bridge\" \"npm:dev:web\"",
     "dev:web": "vite --host 127.0.0.1 --port 5173",
-    "dev:bridge": "tsx src/bridge/server.ts",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "dev:bridge": "node scripts/dev-bridge.mjs",
+    "test": "vitest run src",
+    "test:coverage": "vitest run --coverage src",
     "check": "tsc --noEmit",
     "build": "npm run check && vite build"
   },

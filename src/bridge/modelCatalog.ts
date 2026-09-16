@@ -8,7 +8,7 @@ import {
 import type { BridgeConfig } from "./config.js";
 
 const DEFAULT_CACHE_TTL_MS = 30_000;
-const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 20_000;
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
 export interface ModelCatalogCommandResult {

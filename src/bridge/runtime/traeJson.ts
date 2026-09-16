@@ -4,6 +4,8 @@ export interface ParsedTraeJsonEvent {
   delta?: string;
   snapshot?: string;
   runtimeSessionId?: string;
+  resolvedModelId?: string;
+  queued?: boolean;
   completed?: boolean;
   error?: string;
 }
@@ -26,6 +28,15 @@ const DELTA_KEYS = [
 ];
 
 const SNAPSHOT_KEYS = ["message", "content", "text", "output_text", "outputText"];
+const MODEL_KEYS = ["model_id", "modelId", "model_name", "modelName", "model"];
+const QUEUE_STATE_KEYS = ["status", "state", "phase", "queue_status", "queueStatus"];
+const QUEUE_STATES = new Set([
+  "queued",
+  "queued for capacity",
+  "queued_for_capacity",
+  "waiting for capacity",
+  "waiting_for_capacity",
+]);
 
 export function parseTraeJsonLine(line: string): ParsedTraeJsonEvent | null {
   const trimmed = line.trim();
@@ -51,6 +62,13 @@ export function parseTraeJsonLine(line: string): ParsedTraeJsonEvent | null {
   const runtimeSessionId = findStringByKeys(payload, SESSION_KEYS);
   if (runtimeSessionId) {
     event.runtimeSessionId = runtimeSessionId;
+  }
+  const resolvedModelId = findStringByKeys(payload, MODEL_KEYS);
+  if (resolvedModelId) {
+    event.resolvedModelId = resolvedModelId;
+  }
+  if (isExplicitCapacityQueueEvent(payload)) {
+    event.queued = true;
   }
 
   const lowerType = type.toLowerCase();
@@ -82,6 +100,41 @@ export function parseTraeJsonLine(line: string): ParsedTraeJsonEvent | null {
   }
 
   return Object.keys(event).length > 0 ? event : null;
+}
+
+export function isExplicitCapacityQueueEvent(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const eventName = [
+    getString(value, "type"),
+    getString(value, "method"),
+    getString(value, "event"),
+  ].find((candidate) => candidate && isQueueState(candidate));
+  if (eventName) {
+    return true;
+  }
+
+  for (const key of QUEUE_STATE_KEYS) {
+    const candidate = value[key];
+    if (typeof candidate === "string" && isQueueState(candidate)) {
+      return true;
+    }
+  }
+
+  const message = getString(value, "message");
+  if (message && isQueueState(message)) {
+    return true;
+  }
+
+  for (const key of ["params", "payload", "data"]) {
+    if (isExplicitCapacityQueueEvent(value[key])) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function findStringByKeys(
@@ -234,4 +287,14 @@ function extractErrorText(payload: Record<string, unknown>): string | undefined 
 function getString(value: Record<string, unknown>, key: string): string | undefined {
   const candidate = value[key];
   return typeof candidate === "string" ? candidate : undefined;
+}
+
+function isQueueState(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (QUEUE_STATES.has(normalized)) {
+    return true;
+  }
+
+  const eventSegment = normalized.split(/[./:]/).at(-1);
+  return eventSegment === "queued" || eventSegment === "waiting_for_capacity";
 }

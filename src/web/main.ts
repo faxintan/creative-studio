@@ -3,8 +3,11 @@ import "./styles.css";
 import { BridgeClient, type BridgeClientStatus } from "./bridgeClient.js";
 import {
   clearTranscript,
+  loadSelectedModelId,
   loadSessionId,
   loadTranscript,
+  resolveSelectedModelId,
+  saveSelectedModelId,
   saveTranscript,
 } from "./storage.js";
 import {
@@ -12,6 +15,8 @@ import {
   type BridgeEvent,
   type ChatError,
   type ConnectionState,
+  type ModelCatalogSnapshot,
+  type ModelSummary,
   type RuntimeKind,
   type TranscriptMessage,
 } from "../shared/protocol.js";
@@ -22,6 +27,11 @@ interface UiState {
   connectionState: ConnectionState;
   runtime: RuntimeKind;
   statusMessage: string;
+  models: ModelSummary[];
+  modelCatalogState: "loading" | "ready" | "error";
+  modelCatalogStale: boolean;
+  modelCatalogMessage: string;
+  selectedModelId?: string;
   activeRunId?: string;
   activeAssistantMessageId?: string;
 }
@@ -32,6 +42,11 @@ const state: UiState = {
   connectionState: "connecting",
   runtime: "unavailable",
   statusMessage: "Connecting",
+  models: [],
+  modelCatalogState: "loading",
+  modelCatalogStale: false,
+  modelCatalogMessage: "Loading models",
+  selectedModelId: loadSelectedModelId(),
 };
 
 const root = document.querySelector<HTMLDivElement>("#app");
@@ -58,6 +73,21 @@ root.innerHTML = `
     <main id="transcript" class="transcript" aria-live="polite"></main>
 
     <form id="composer-form" class="composer">
+      <div class="model-toolbar">
+        <label class="model-field" for="model-select">
+          <span>Model</span>
+          <select id="model-select" aria-describedby="model-catalog-message"></select>
+        </label>
+        <span id="model-load" class="model-load"></span>
+        <button
+          id="refresh-models-button"
+          type="button"
+          class="icon-button"
+          aria-label="Refresh models"
+          title="Refresh models"
+        >&#8635;</button>
+        <span id="model-catalog-message" class="model-catalog-message"></span>
+      </div>
       <textarea
         id="composer-input"
         rows="1"
@@ -79,6 +109,10 @@ const inputEl = mustGet<HTMLTextAreaElement>("composer-input");
 const sendButton = mustGet<HTMLButtonElement>("send-button");
 const cancelButton = mustGet<HTMLButtonElement>("cancel-button");
 const clearButton = mustGet<HTMLButtonElement>("clear-button");
+const modelSelect = mustGet<HTMLSelectElement>("model-select");
+const modelLoad = mustGet<HTMLSpanElement>("model-load");
+const modelCatalogMessage = mustGet<HTMLSpanElement>("model-catalog-message");
+const refreshModelsButton = mustGet<HTMLButtonElement>("refresh-models-button");
 const connectionPill = mustGet<HTMLSpanElement>("connection-pill");
 const runtimePill = mustGet<HTMLSpanElement>("runtime-pill");
 const sessionLabel = mustGet<HTMLParagraphElement>("session-label");
@@ -124,6 +158,25 @@ clearButton.addEventListener("click", () => {
   render();
 });
 
+modelSelect.addEventListener("change", () => {
+  state.selectedModelId = modelSelect.value || undefined;
+  if (state.selectedModelId) {
+    saveSelectedModelId(state.selectedModelId);
+  }
+  renderModelControls();
+  updateControls();
+});
+
+refreshModelsButton.addEventListener("click", () => {
+  if (state.connectionState !== "connected") {
+    return;
+  }
+  state.modelCatalogState = "loading";
+  state.modelCatalogMessage = "Refreshing models";
+  renderModelControls();
+  bridge.send({ type: "refresh_models" });
+});
+
 transcriptEl.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) {
@@ -156,6 +209,12 @@ function submitPrompt(rawPrompt: string): void {
     return;
   }
 
+  if (!state.selectedModelId) {
+    updateStatus("Select an available model before sending.");
+    return;
+  }
+
+  const modelId = state.selectedModelId;
   const clientMessageId = crypto.randomUUID();
   const optimistic = createMessage("user", prompt, "complete", clientMessageId);
   upsertMessage(optimistic);
@@ -168,6 +227,7 @@ function submitPrompt(rawPrompt: string): void {
     bridgeSessionId: state.sessionId,
     clientMessageId,
     prompt,
+    modelId,
   });
 
   if (!sent) {
@@ -194,6 +254,23 @@ function handleBridgeEvent(event: BridgeEvent): void {
       state.connectionState = event.state;
       state.runtime = event.runtime;
       state.statusMessage = event.message ?? event.state;
+      if (event.state === "connected") {
+        state.modelCatalogState = "loading";
+        state.modelCatalogMessage = "Loading models";
+        bridge.send({ type: "get_models" });
+      }
+      break;
+    case "models_snapshot":
+      applyModelSnapshot(event.snapshot);
+      break;
+    case "models_error":
+      if (event.staleSnapshot) {
+        applyModelSnapshot(event.staleSnapshot);
+      }
+      state.modelCatalogState = "error";
+      state.modelCatalogStale = Boolean(event.staleSnapshot);
+      state.modelCatalogMessage =
+        event.error.details ?? event.error.message;
       break;
     case "user_message_accepted":
       upsertMessage(event.message);
@@ -202,6 +279,12 @@ function handleBridgeEvent(event: BridgeEvent): void {
       state.activeRunId = event.runId;
       state.activeAssistantMessageId = event.message.id;
       upsertMessage(event.message);
+      break;
+    case "assistant_queued":
+      updateActiveMessageStatus(event.runId, "queued");
+      break;
+    case "assistant_model_updated":
+      updateAssistantModel(event.runId, event.model);
       break;
     case "assistant_delta":
       appendAssistantDelta(event.runId, event.delta);
@@ -237,7 +320,49 @@ function appendAssistantDelta(runId: string, delta: string): void {
     return;
   }
 
+  if (isTerminalStatus(message.status)) {
+    return;
+  }
+
+  message.status = "streaming";
   message.content += delta;
+  message.updatedAt = new Date().toISOString();
+}
+
+function updateActiveMessageStatus(
+  runId: string,
+  status: Extract<TranscriptMessage["status"], "queued" | "streaming">,
+): void {
+  if (runId !== state.activeRunId || !state.activeAssistantMessageId) {
+    return;
+  }
+  const message = state.messages.find(
+    (candidate) => candidate.id === state.activeAssistantMessageId,
+  );
+  if (!message || isTerminalStatus(message.status)) {
+    return;
+  }
+  if (status === "queued" && message.status !== "submitting") {
+    return;
+  }
+  message.status = status;
+  message.updatedAt = new Date().toISOString();
+}
+
+function updateAssistantModel(
+  runId: string,
+  model: NonNullable<TranscriptMessage["model"]>,
+): void {
+  if (runId !== state.activeRunId || !state.activeAssistantMessageId) {
+    return;
+  }
+  const message = state.messages.find(
+    (candidate) => candidate.id === state.activeAssistantMessageId,
+  );
+  if (!message || isTerminalStatus(message.status)) {
+    return;
+  }
+  message.model = model;
   message.updatedAt = new Date().toISOString();
 }
 
@@ -291,6 +416,7 @@ function render(): void {
   connectionPill.dataset.state = state.connectionState;
   runtimePill.textContent = `Runtime ${state.runtime}`;
   runtimePill.dataset.runtime = state.runtime;
+  renderModelControls();
 
   transcriptEl.replaceChildren();
   if (state.messages.length === 0) {
@@ -322,7 +448,18 @@ function renderMessage(message: TranscriptMessage): HTMLElement {
   const status = document.createElement("span");
   status.textContent = labelForStatus(message.status);
 
-  meta.append(role, status);
+  const messageContext = document.createElement("span");
+  messageContext.className = "message-context";
+  if (message.model) {
+    const model = document.createElement("span");
+    model.className = "message-model";
+    model.textContent = message.model.label;
+    model.title = message.model.id;
+    messageContext.append(model);
+  }
+  messageContext.append(status);
+
+  meta.append(role, messageContext);
 
   const body = document.createElement("div");
   body.className = "message-body";
@@ -357,11 +494,15 @@ function renderMessage(message: TranscriptMessage): HTMLElement {
 function updateControls(): void {
   const canSend =
     state.connectionState === "connected" &&
+    Boolean(state.selectedModelId) &&
     Boolean(inputEl.value.trim()) &&
     !state.activeRunId;
   sendButton.disabled = !canSend;
   cancelButton.disabled = !state.activeRunId;
   inputEl.disabled = state.connectionState !== "connected";
+  modelSelect.disabled = state.models.length === 0;
+  refreshModelsButton.disabled =
+    state.connectionState !== "connected" || state.modelCatalogState === "loading";
 }
 
 function updateStatus(message: string): void {
@@ -380,6 +521,12 @@ function labelForRole(role: TranscriptMessage["role"]): string {
 }
 
 function labelForStatus(status: TranscriptMessage["status"]): string {
+  if (status === "submitting") {
+    return "Submitting";
+  }
+  if (status === "queued") {
+    return "Queued for capacity";
+  }
   if (status === "streaming") {
     return "Running";
   }
@@ -393,6 +540,12 @@ function labelForStatus(status: TranscriptMessage["status"]): string {
 }
 
 function placeholderForMessage(message: TranscriptMessage): string {
+  if (message.status === "submitting") {
+    return "Submitting...";
+  }
+  if (message.status === "queued") {
+    return "Waiting for model capacity...";
+  }
   if (message.status === "streaming") {
     return "Waiting for output...";
   }
@@ -400,6 +553,64 @@ function placeholderForMessage(message: TranscriptMessage): string {
     return "Canceled.";
   }
   return "";
+}
+
+function applyModelSnapshot(snapshot: ModelCatalogSnapshot): void {
+  state.models = snapshot.models;
+  state.modelCatalogState = "ready";
+  state.modelCatalogStale = snapshot.stale;
+  state.modelCatalogMessage = snapshot.stale
+    ? "Showing last available catalog"
+    : `Updated ${formatObservedTime(snapshot.observedAt)}`;
+  state.selectedModelId = resolveSelectedModelId(snapshot, state.selectedModelId);
+  if (state.selectedModelId) {
+    saveSelectedModelId(state.selectedModelId);
+  }
+}
+
+function renderModelControls(): void {
+  const selected = state.selectedModelId;
+  modelSelect.replaceChildren();
+
+  if (state.models.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent =
+      state.modelCatalogState === "loading" ? "Loading models..." : "No models available";
+    modelSelect.append(option);
+  } else {
+    for (const model of state.models) {
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.label;
+      option.selected = model.id === selected;
+      modelSelect.append(option);
+    }
+  }
+
+  const selectedModel = state.models.find((model) => model.id === selected);
+  modelLoad.textContent = selectedModel
+    ? selectedModel.loadPercent === undefined
+      ? "Load unavailable"
+      : `Load ${selectedModel.loadPercent}%`
+    : "Load unavailable";
+  modelLoad.dataset.available =
+    selectedModel?.loadPercent === undefined ? "false" : "true";
+
+  modelCatalogMessage.textContent = state.modelCatalogMessage;
+  modelCatalogMessage.dataset.state = state.modelCatalogState;
+  modelCatalogMessage.dataset.stale = String(state.modelCatalogStale);
+}
+
+function formatObservedTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "recently"
+    : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function isTerminalStatus(status: TranscriptMessage["status"]): boolean {
+  return status === "complete" || status === "failed" || status === "canceled";
 }
 
 function findPromptBefore(messageId: string): string | undefined {

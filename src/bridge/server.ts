@@ -13,9 +13,15 @@ import {
   type BridgeCommand,
   type BridgeEvent,
   type ChatError,
+  type ModelAttribution,
+  type ModelSummary,
   type TranscriptMessage,
 } from "../shared/protocol.js";
 import { isLocalRemoteAddress, loadBridgeConfig } from "./config.js";
+import {
+  ModelCatalogError,
+  ModelCatalogProvider,
+} from "./modelCatalog.js";
 import { createRuntimeAdapter } from "./runtime/createRuntimeAdapter.js";
 import { RuntimeError, type TraeRuntimeAdapter } from "./runtime/types.js";
 import { BridgeSessionStore, type BridgeSession } from "./sessionStore.js";
@@ -24,6 +30,7 @@ const config = loadBridgeConfig();
 const sessions = new BridgeSessionStore();
 const runtimeSelection = await createRuntimeAdapter(config);
 const runtime = runtimeSelection.adapter;
+const modelCatalog = ModelCatalogProvider.fromConfig(config);
 
 const server = createServer((request, response) => {
   routeHttpRequest(request, response, runtime);
@@ -55,7 +62,7 @@ wss.on("connection", (socket, request) => {
   });
 
   socket.on("message", (raw) => {
-    void handleSocketMessage(socket, session, raw.toString(), runtime);
+    void handleSocketMessage(socket, session, raw.toString(), runtime, modelCatalog);
   });
 });
 
@@ -81,6 +88,7 @@ async function handleSocketMessage(
   session: BridgeSession,
   raw: string,
   adapter: TraeRuntimeAdapter,
+  catalog: ModelCatalogProvider,
 ): Promise<void> {
   let payload: unknown;
   try {
@@ -100,12 +108,17 @@ async function handleSocketMessage(
     return;
   }
 
+  if (payload.type === "get_models" || payload.type === "refresh_models") {
+    await sendModelCatalog(socket, session.id, catalog, payload.type === "refresh_models");
+    return;
+  }
+
   if (payload.type === "cancel_response") {
     await cancelActiveRun(socket, session, payload.runId, adapter);
     return;
   }
 
-  await handleSendMessage(socket, session, payload, adapter);
+  await handleSendMessage(socket, session, payload, adapter, catalog);
 }
 
 async function handleSendMessage(
@@ -113,6 +126,7 @@ async function handleSendMessage(
   session: BridgeSession,
   command: Extract<BridgeCommand, { type: "send_message" }>,
   adapter: TraeRuntimeAdapter,
+  catalog: ModelCatalogProvider,
 ): Promise<void> {
   const prompt = command.prompt.trim();
   if (!prompt) {
@@ -135,6 +149,11 @@ async function handleSendMessage(
     return;
   }
 
+  const model = await resolveRequestedModel(socket, session.id, command.modelId, catalog);
+  if (!model) {
+    return;
+  }
+
   const userMessage = createMessage("user", prompt, "complete", command.clientMessageId);
   sessions.appendMessage(session, userMessage);
   send(socket, {
@@ -145,12 +164,15 @@ async function handleSendMessage(
   });
 
   const runId = randomUUID();
-  const assistantMessage = createMessage("assistant", "", "streaming");
+  const assistantMessage = createMessage("assistant", "", "submitting");
+  assistantMessage.model = toAttribution(model);
   sessions.appendMessage(session, assistantMessage);
   const controller = new AbortController();
   session.activeRun = {
     runId,
     assistantMessageId: assistantMessage.id,
+    model: assistantMessage.model,
+    status: "submitting",
     controller,
     completed: false,
   };
@@ -168,17 +190,23 @@ async function handleSendMessage(
         bridgeSessionId: session.id,
         runId,
         prompt,
+        modelId: model.id,
         history: session.history,
         runtimeSessionId: session.runtimeSessionId,
         signal: controller.signal,
       },
       {
         onDelta: (delta) => {
+          const active = getActiveRun(session, runId);
+          if (!active || controller.signal.aborted) {
+            return;
+          }
+          active.status = "streaming";
           const current = sessions.updateMessage(session, assistantMessage.id, {
             content: `${getMessageContent(session, assistantMessage.id)}${delta}`,
             status: "streaming",
           });
-          if (current && !controller.signal.aborted) {
+          if (current) {
             send(socket, {
               type: "assistant_delta",
               bridgeSessionId: session.id,
@@ -186,6 +214,43 @@ async function handleSendMessage(
               delta,
             });
           }
+        },
+        onQueued: () => {
+          const active = getActiveRun(session, runId);
+          if (!active || active.status !== "submitting" || controller.signal.aborted) {
+            return;
+          }
+          active.status = "queued";
+          sessions.updateMessage(session, assistantMessage.id, {
+            status: "queued",
+          });
+          send(socket, {
+            type: "assistant_queued",
+            bridgeSessionId: session.id,
+            runId,
+          });
+        },
+        onResolvedModel: (modelId) => {
+          const active = getActiveRun(session, runId);
+          if (!active || controller.signal.aborted || modelId === active.model.id) {
+            return;
+          }
+          const resolved = catalog.lastSnapshot?.models.find(
+            (candidate) => candidate.id === modelId,
+          );
+          const attribution = resolved
+            ? toAttribution(resolved)
+            : { id: modelId, label: modelId };
+          active.model = attribution;
+          sessions.updateMessage(session, assistantMessage.id, {
+            model: attribution,
+          });
+          send(socket, {
+            type: "assistant_model_updated",
+            bridgeSessionId: session.id,
+            runId,
+            model: attribution,
+          });
         },
         onRuntimeSession: (runtimeSessionId) => {
           session.runtimeSessionId = runtimeSessionId;
@@ -201,8 +266,29 @@ async function handleSendMessage(
     if (result.runtimeSessionId) {
       session.runtimeSessionId = result.runtimeSessionId;
     }
+    if (result.resolvedModelId) {
+      const active = getActiveRun(session, runId);
+      if (active && result.resolvedModelId !== active.model.id) {
+        const resolved = catalog.lastSnapshot?.models.find(
+          (candidate) => candidate.id === result.resolvedModelId,
+        );
+        const attribution = resolved
+          ? toAttribution(resolved)
+          : { id: result.resolvedModelId, label: result.resolvedModelId };
+        active.model = attribution;
+        sessions.updateMessage(session, assistantMessage.id, { model: attribution });
+        send(socket, {
+          type: "assistant_model_updated",
+          bridgeSessionId: session.id,
+          runId,
+          model: attribution,
+        });
+      }
+    }
 
-    if (!controller.signal.aborted) {
+    const active = getActiveRun(session, runId);
+    if (active && !controller.signal.aborted) {
+      active.completed = true;
       sessions.updateMessage(session, assistantMessage.id, {
         status: "complete",
       });
@@ -214,6 +300,11 @@ async function handleSendMessage(
       });
     }
   } catch (error) {
+    const active = getActiveRun(session, runId);
+    if (!active) {
+      return;
+    }
+    active.completed = true;
     const chatError = normalizeError(error);
     const status = chatError.code === "request_canceled" ? "canceled" : "failed";
     sessions.updateMessage(session, assistantMessage.id, {
@@ -241,13 +332,20 @@ async function cancelActiveRun(
   adapter: TraeRuntimeAdapter,
 ): Promise<void> {
   const active = session.activeRun;
-  if (!active || active.runId !== runId) {
+  if (!active || active.runId !== runId || active.completed) {
     sendRejected(socket, session.id, "invalid_command", "No matching active response exists.");
     return;
   }
 
+  active.completed = true;
   active.controller.abort();
-  await adapter.cancel?.(runId);
+  try {
+    await adapter.cancel?.(runId);
+  } catch (error) {
+    console.warn(
+      `[traecli] cancel failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   sessions.updateMessage(session, active.assistantMessageId, {
     status: "canceled",
     error: {
@@ -260,6 +358,108 @@ async function cancelActiveRun(
     bridgeSessionId: session.id,
     runId,
   });
+  if (session.activeRun?.runId === runId) {
+    session.activeRun = undefined;
+  }
+}
+
+async function sendModelCatalog(
+  socket: WebSocket,
+  bridgeSessionId: string,
+  catalog: ModelCatalogProvider,
+  forceRefresh: boolean,
+): Promise<void> {
+  try {
+    const snapshot = await catalog.getSnapshot(forceRefresh);
+    send(socket, {
+      type: "models_snapshot",
+      bridgeSessionId,
+      snapshot,
+    });
+  } catch (error) {
+    const catalogError =
+      error instanceof ModelCatalogError
+        ? error
+        : new ModelCatalogError(
+            error instanceof Error ? error.message : "Unable to load model catalog.",
+          );
+    send(socket, {
+      type: "models_error",
+      bridgeSessionId,
+      error: {
+        code: "model_catalog_unavailable",
+        message: "Unable to load models from TraeCode CLI.",
+        details: catalogError.message,
+      },
+      staleSnapshot: catalogError.staleSnapshot,
+    });
+  }
+}
+
+async function resolveRequestedModel(
+  socket: WebSocket,
+  bridgeSessionId: string,
+  modelId: string,
+  catalog: ModelCatalogProvider,
+): Promise<ModelSummary | undefined> {
+  let snapshot;
+  try {
+    snapshot = await catalog.getSnapshot();
+  } catch (error) {
+    if (error instanceof ModelCatalogError && error.staleSnapshot) {
+      snapshot = error.staleSnapshot;
+    } else {
+      sendRejected(
+        socket,
+        bridgeSessionId,
+        "model_catalog_unavailable",
+        "Unable to validate the selected model.",
+        error instanceof Error ? error.message : undefined,
+      );
+      return undefined;
+    }
+  }
+
+  let model = snapshot.models.find((candidate) => candidate.id === modelId);
+  if (model) {
+    return model;
+  }
+
+  try {
+    const refreshed = await catalog.getSnapshot(true);
+    model = refreshed.models.find((candidate) => candidate.id === modelId);
+  } catch (error) {
+    sendRejected(
+      socket,
+      bridgeSessionId,
+      "model_catalog_unavailable",
+      "Unable to refresh models before sending.",
+      error instanceof Error ? error.message : undefined,
+    );
+    return undefined;
+  }
+
+  if (!model) {
+    sendRejected(
+      socket,
+      bridgeSessionId,
+      "model_unavailable",
+      `The selected model "${modelId}" is no longer available.`,
+    );
+  }
+  return model;
+}
+
+function getActiveRun(session: BridgeSession, runId: string): BridgeSession["activeRun"] {
+  const active = session.activeRun;
+  return active && active.runId === runId && !active.completed ? active : undefined;
+}
+
+function toAttribution(model: ModelSummary): ModelAttribution {
+  return {
+    id: model.id,
+    label: model.label,
+  };
 }
 
 function routeHttpRequest(
@@ -350,6 +550,7 @@ function sendRejected(
   bridgeSessionId: string | undefined,
   code: ChatError["code"],
   message: string,
+  details?: string,
 ): void {
   send(socket, {
     type: "command_rejected",
@@ -357,6 +558,7 @@ function sendRejected(
     error: {
       code,
       message,
+      details,
     },
   });
 }

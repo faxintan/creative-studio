@@ -44,7 +44,7 @@ export class ExecTraeRuntimeAdapter implements TraeRuntimeAdapter {
     request: RuntimePromptRequest,
     handlers: RuntimeEventHandlers,
   ): Promise<RuntimePromptResult> {
-    const args = this.buildArgs(request.runtimeSessionId);
+    const args = this.buildArgs(request.runtimeSessionId, request.modelId);
     const child = spawn(this.config.traecliPath, args, {
       cwd: this.config.workspaceRoot,
       stdio: ["pipe", "pipe", "pipe"],
@@ -58,6 +58,44 @@ export class ExecTraeRuntimeAdapter implements TraeRuntimeAdapter {
     let bufferedStdout = "";
     let lastSnapshot = "";
     let runtimeSessionId = request.runtimeSessionId;
+    let resolvedModelId: string | undefined;
+    let queued = false;
+
+    const handleParsedEvent = (parsed: ReturnType<typeof parseTraeJsonLine>) => {
+      if (!parsed) {
+        return;
+      }
+
+      if (parsed.runtimeSessionId) {
+        runtimeSessionId = parsed.runtimeSessionId;
+        handlers.onRuntimeSession(parsed.runtimeSessionId);
+      }
+
+      if (parsed.resolvedModelId && parsed.resolvedModelId !== resolvedModelId) {
+        resolvedModelId = parsed.resolvedModelId;
+        handlers.onResolvedModel(parsed.resolvedModelId);
+      }
+
+      if (parsed.queued && !queued) {
+        queued = true;
+        handlers.onQueued();
+      }
+
+      if (parsed.error) {
+        handlers.onDiagnostic?.(parsed.error);
+      }
+
+      if (parsed.delta) {
+        handlers.onDelta(parsed.delta);
+        lastSnapshot += parsed.delta;
+      } else if (parsed.snapshot) {
+        const delta = snapshotDelta(lastSnapshot, parsed.snapshot);
+        if (delta) {
+          handlers.onDelta(delta);
+          lastSnapshot = parsed.snapshot;
+        }
+      }
+    };
 
     const abort = () => {
       if (!child.killed) {
@@ -88,30 +126,7 @@ export class ExecTraeRuntimeAdapter implements TraeRuntimeAdapter {
       bufferedStdout = lines.pop() ?? "";
 
       for (const line of lines) {
-        const parsed = parseTraeJsonLine(line);
-        if (!parsed) {
-          continue;
-        }
-
-        if (parsed.runtimeSessionId) {
-          runtimeSessionId = parsed.runtimeSessionId;
-          handlers.onRuntimeSession(parsed.runtimeSessionId);
-        }
-
-        if (parsed.error) {
-          handlers.onDiagnostic?.(parsed.error);
-        }
-
-        if (parsed.delta) {
-          handlers.onDelta(parsed.delta);
-          lastSnapshot += parsed.delta;
-        } else if (parsed.snapshot) {
-          const delta = snapshotDelta(lastSnapshot, parsed.snapshot);
-          if (delta) {
-            handlers.onDelta(delta);
-            lastSnapshot = parsed.snapshot;
-          }
-        }
+        handleParsedEvent(parseTraeJsonLine(line));
       }
     });
 
@@ -134,18 +149,7 @@ export class ExecTraeRuntimeAdapter implements TraeRuntimeAdapter {
     }
 
     if (bufferedStdout.trim()) {
-      const parsed = parseTraeJsonLine(bufferedStdout);
-      if (parsed?.runtimeSessionId) {
-        runtimeSessionId = parsed.runtimeSessionId;
-      }
-      if (parsed?.delta) {
-        handlers.onDelta(parsed.delta);
-      } else if (parsed?.snapshot) {
-        const delta = snapshotDelta(lastSnapshot, parsed.snapshot);
-        if (delta) {
-          handlers.onDelta(delta);
-        }
-      }
+      handleParsedEvent(parseTraeJsonLine(bufferedStdout));
     }
 
     if (code !== 0) {
@@ -158,6 +162,7 @@ export class ExecTraeRuntimeAdapter implements TraeRuntimeAdapter {
 
     return {
       runtimeSessionId,
+      resolvedModelId,
     };
   }
 
@@ -168,11 +173,9 @@ export class ExecTraeRuntimeAdapter implements TraeRuntimeAdapter {
     }
   }
 
-  private buildArgs(runtimeSessionId: string | undefined): string[] {
+  private buildArgs(runtimeSessionId: string | undefined, modelId: string): string[] {
     const globalArgs = ["-C", this.config.workspaceRoot, "--sandbox", this.config.traeSandboxMode];
-    if (this.config.traeModel) {
-      globalArgs.push("--model", this.config.traeModel);
-    }
+    globalArgs.push("--model", modelId);
     const permissionArgs = this.config.traePermissionMode
       ? ["--permission-mode", this.config.traePermissionMode]
       : [];

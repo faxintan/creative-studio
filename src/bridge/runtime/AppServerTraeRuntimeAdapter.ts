@@ -3,6 +3,10 @@ import WebSocket from "ws";
 import { isRecord } from "../../shared/protocol.js";
 import type { BridgeConfig } from "../config.js";
 import {
+  findStringByKeys,
+  isExplicitCapacityQueueEvent,
+} from "./traeJson.js";
+import {
   RuntimeError,
   type RuntimeAvailability,
   type RuntimeEventHandlers,
@@ -77,6 +81,28 @@ export class AppServerTraeRuntimeAdapter implements TraeRuntimeAdapter {
     const client = await AppServerJsonRpcClient.connect(this.config.appServerWsUrl, 5000);
     let threadId = request.runtimeSessionId;
     let turnId: string | undefined;
+    let queued = false;
+    let resolvedModelId: string | undefined;
+
+    const onQueued = () => {
+      if (!queued) {
+        queued = true;
+        handlers.onQueued();
+      }
+    };
+    const onResolvedModel = (value: unknown) => {
+      const modelId = findStringByKeys(value, [
+        "model_id",
+        "modelId",
+        "model_name",
+        "modelName",
+        "model",
+      ]);
+      if (modelId && modelId !== resolvedModelId) {
+        resolvedModelId = modelId;
+        handlers.onResolvedModel(modelId);
+      }
+    };
 
     const abort = () => {
       if (threadId && turnId) {
@@ -103,10 +129,11 @@ export class AppServerTraeRuntimeAdapter implements TraeRuntimeAdapter {
         const started = await client.request("thread/start", {
           cwd: this.config.workspaceRoot,
           sandbox: this.config.traeSandboxMode,
-          model: this.config.traeModel ?? null,
+          model: request.modelId,
           threadSource: "custom",
           historyMode: "persisted",
         });
+        onResolvedModel(started);
         threadId = extractThreadId(started);
         if (!threadId) {
           throw new RuntimeError(
@@ -133,8 +160,9 @@ export class AppServerTraeRuntimeAdapter implements TraeRuntimeAdapter {
           },
         ],
         sandboxPolicy: this.config.traeSandboxMode,
-        model: this.config.traeModel ?? null,
+        model: request.modelId,
       });
+      onResolvedModel(turnStarted);
       turnId = extractTurnId(turnStarted);
 
       await client.waitForTurn({
@@ -142,6 +170,8 @@ export class AppServerTraeRuntimeAdapter implements TraeRuntimeAdapter {
         turnId,
         signal: request.signal,
         onDelta: handlers.onDelta,
+        onQueued,
+        onResolvedModel,
         onError: (message) => {
           handlers.onDiagnostic?.(message);
         },
@@ -149,6 +179,7 @@ export class AppServerTraeRuntimeAdapter implements TraeRuntimeAdapter {
 
       return {
         runtimeSessionId: threadId,
+        resolvedModelId,
       };
     } catch (error) {
       if (request.signal.aborted) {
@@ -218,6 +249,8 @@ class AppServerJsonRpcClient {
     turnId?: string;
     signal: AbortSignal;
     onDelta(delta: string): void;
+    onQueued(): void;
+    onResolvedModel(value: unknown): void;
     onError(message: string): void;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -234,6 +267,13 @@ class AppServerJsonRpcClient {
           return;
         }
         if (args.turnId && turnId && turnId !== args.turnId) {
+          return;
+        }
+
+        args.onResolvedModel(params);
+
+        if (isExplicitCapacityQueueEvent(message)) {
+          args.onQueued();
           return;
         }
 

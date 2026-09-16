@@ -11,6 +11,8 @@ AiChat currently uses one bridge-configured model and gives users no visibility 
 - Add an explicit queued run state when TraeCode CLI reports that a submitted request is waiting for model capacity.
 - Allow queued requests to be canceled using the existing cancellation workflow.
 - Keep submitting, queued, streaming, completed, canceled, and failed states distinct in the browser-to-bridge protocol.
+- Push the model catalog automatically when a browser connection is established, and recover from slow or failed catalog loading without leaving the selector indefinitely in a loading state.
+- Make one-click local startup replace an existing process occupying the Bridge port before starting the current Bridge, preventing `EADDRINUSE` from terminating the web server.
 
 ## Capabilities
 
@@ -28,4 +30,5 @@ None.
 - Extends the runtime adapter boundary so both app-server and `exec --json` integrations receive the selected model and normalize queue notifications.
 - Adds a bridge-owned model catalog provider backed by `traecli models --json`, with bounded caching and refresh behavior.
 - Updates browser state, transcript persistence, composer controls, and run-state rendering.
+- Adds startup lifecycle handling for model bootstrap, stale Bridge processes, and port reuse.
 - Does not add automatic model switching, synthetic queue estimates, remote model administration, pricing displays, or cloud persistence.

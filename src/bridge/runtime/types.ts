@@ -14,6 +14,7 @@ export interface RuntimePromptRequest {
   bridgeSessionId: string;
   runId: string;
   prompt: string;
+  modelId: string;
   history: TranscriptMessage[];
   runtimeSessionId?: string;
   signal: AbortSignal;
@@ -21,12 +22,15 @@ export interface RuntimePromptRequest {
 
 export interface RuntimeEventHandlers {
   onDelta(delta: string): void;
+  onQueued(): void;
+  onResolvedModel(modelId: string): void;
   onRuntimeSession(runtimeSessionId: string): void;
   onDiagnostic?(message: string): void;
 }
 
 export interface RuntimePromptResult {
   runtimeSessionId?: string;
+  resolvedModelId?: string;
 }
 
 export interface TraeRuntimeAdapter {

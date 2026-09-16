@@ -4,9 +4,11 @@ See `proposal.md` for motivation and `specs/ai-chat-web/spec.md` for the behavio
 
 The browser, local bridge, and TraeCode CLI are separated by a shared WebSocket protocol and a `TraeRuntimeAdapter` boundary. The bridge currently applies one optional `TRAECLI_MODEL` value to every request. The app-server adapter can send a model on `thread/start` and `turn/start`; the exec adapter can pass `--model`. Neither adapter currently exposes queue transitions. Browser transcript state is persisted locally and currently represents an active response only as streaming.
 
-`traecli models --json` is the source of model identifiers and optional `_meta.trae.load.percent` values. Reported percentages can exceed 100, and some models omit load. Runtime payloads can contain queue-related metadata, but only an explicit lifecycle/status indication that the current request is waiting for capacity is sufficient to enter the queued state.
+`traecli models --json` is the source of model identifiers and optional `_meta.trae.load.percent` values. Reported percentages can exceed 100, and some models omit load. The command can take several seconds to start and can write sandbox/PATH warnings to stderr while still returning valid JSON on stdout. Runtime payloads can contain queue-related metadata, but only an explicit lifecycle/status indication that the current request is waiting for capacity is sufficient to enter the queued state.
 
 The app-server protocol is experimental, so the design must preserve the `exec --json` fallback and keep runtime-specific payload handling behind adapters.
+
+The local development command runs Bridge and Vite through `concurrently`. A previous Bridge process can survive a terminal interruption and retain the default port, causing the next `pnpm dev` invocation to fail before the web server is usable.
 
 ## Goals / Non-Goals
 
@@ -17,6 +19,7 @@ The app-server protocol is experimental, so the design must preserve the `exec -
 - Preserve the active runtime conversation when the selected model changes.
 - Normalize explicit capacity waiting into one protocol-level queued transition across both runtime adapters.
 - Keep stored transcripts readable across the protocol and message-schema migration.
+- Make startup deterministic when a previous project Bridge process owns the configured port.
 
 **Non-Goals:**
 
@@ -38,11 +41,27 @@ Add a bridge-side provider that invokes `traecli models --json`, parses the resu
 
 The provider keeps a short bounded cache to avoid starting a CLI process on every reconnect. An initial catalog request may use a fresh cached snapshot; an explicit refresh bypasses the cache. Concurrent refreshes share one in-flight lookup. A refresh failure does not rewrite missing load to zero or fabricate an empty successful catalog; the protocol reports the failure and may retain a clearly stale last successful snapshot for display.
 
-The browser requests the catalog after connecting and can issue an explicit refresh command. The bridge responds with either a complete catalog snapshot or a catalog error event. This request/response shape keeps catalog failures separate from chat run failures.
+The bridge pushes a catalog snapshot after each accepted WebSocket connection, while retaining explicit request and refresh commands as idempotent recovery paths. The provider allows the CLI's normal startup latency and ignores stderr when stdout parses into a usable catalog. A bounded command timeout still produces a catalog error event.
 
 Alternative considered: invoke `traecli models --json` directly from the browser. Rejected because browser code must not spawn local processes or understand CLI-specific JSON.
 
 Alternative considered: attach catalog data to every connection-state event. Rejected because refresh and failure semantics need an independent lifecycle.
+
+### 7. Startup uses a project-owned Bridge launcher
+
+Replace the direct `tsx src/bridge/server.ts` development command with a small project-owned launcher. Before spawning the current Bridge, it identifies the process listening on the configured port and verifies that the process belongs to this project's Bridge. A stale project Bridge is terminated gracefully, escalated only if needed, and replaced by the current process. An unrelated port occupant is not killed; the launcher prints a concise actionable conflict and exits without allowing an unhandled `EADDRINUSE` stack trace.
+
+The Bridge server also listens for its own `error` event so unexpected port conflicts produce a controlled exit and diagnostic. The launcher forwards SIGINT/SIGTERM to the current child and preserves `concurrently` shutdown behavior.
+
+Alternative considered: always kill the PID returned for the port. Rejected because it could terminate an unrelated local service.
+
+Alternative considered: silently choose a different port. Rejected because the browser's configured Bridge URL and Origin allowlist would then become inconsistent.
+
+### 8. Browser catalog loading has a bounded recovery path
+
+On a connected event, the browser starts one catalog request and the Bridge independently sends the bootstrap snapshot. A catalog error or an `invalid_command` response received while catalog loading changes the selector to an actionable error state. A single bounded retry is exposed through the existing refresh control; the browser does not spin on repeated retries.
+
+The protocol version remains the compatibility signal. The error text tells the user to restart the Bridge when an older Bridge rejects the catalog command, while normal CLI discovery failures retain their provider details.
 
 ### 2. Model choice is immutable run input
 
@@ -101,6 +120,8 @@ CLI JSON parsing uses structured validation at the provider/adapter boundaries. 
 ## Risks / Trade-offs
 
 - [CLI model schema changes] -> Isolate parsing in the catalog provider, reject unusable snapshots, retain the last successful snapshot as stale, and add representative parser fixtures.
+- [CLI startup takes longer than the UI wait] -> Keep the provider timeout above normal observed startup latency and expose a retry/error state rather than an infinite spinner.
+- [Stale Bridge process remains on the port] -> Replace only a project-owned process through the launcher and report unrelated occupants without killing them.
 - [Experimental app-server queue events change] -> Keep allowlisted mappings adapter-local; unknown events do not alter user-visible state and can be added after verification.
 - [Catalog becomes stale between validation and submission] -> Let the runtime produce an actionable failure and never silently fall back to another model.
 - [Runtime does not emit queue events in one adapter mode] -> Remain in submitting until output or a terminal event; do not infer queueing.
@@ -113,6 +134,7 @@ CLI JSON parsing uses structured validation at the provider/adapter boundaries. 
 2. Add the model catalog provider and expose catalog request, refresh, snapshot, and error messages.
 3. Pass immutable per-run model input through both runtime adapters while retaining `TRAECLI_MODEL` only as an initial preference.
 4. Add queue normalization and the submitting/queued browser state transitions.
-5. Roll out the bridge and bundled web assets together, then verify both app-server and exec fallback modes against representative CLI output.
+5. Add the Bridge startup launcher and controlled port conflict handling.
+6. Roll out the bridge and bundled web assets together, then verify both app-server and exec fallback modes against representative CLI output.
 
 Rollback is a single-version rollback of bridge and web assets. Stored transcript messages with additive model fields remain readable by code that ignores unknown properties; active runs are not migrated across process restarts.

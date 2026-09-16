@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
 
-import type { TranscriptMessage } from "../shared/protocol.js";
+import type {
+  MessageStatus,
+  ModelAttribution,
+  TranscriptMessage,
+} from "../shared/protocol.js";
 
 export interface ActiveRun {
   runId: string;
   assistantMessageId: string;
+  model: ModelAttribution;
+  status: Extract<MessageStatus, "submitting" | "queued" | "streaming">;
   controller: AbortController;
   completed: boolean;
 }
@@ -42,7 +48,7 @@ export class BridgeSessionStore {
   updateMessage(
     session: BridgeSession,
     messageId: string,
-    update: Partial<Pick<TranscriptMessage, "content" | "status" | "error">>,
+    update: Partial<Pick<TranscriptMessage, "content" | "status" | "model" | "error">>,
   ): TranscriptMessage | undefined {
     const message = session.history.find((candidate) => candidate.id === messageId);
     if (!message) {

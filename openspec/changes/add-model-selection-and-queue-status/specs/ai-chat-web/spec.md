@@ -28,6 +28,40 @@ The system SHALL let the user inspect and refresh the models reported by the loc
 - **THEN** the system SHALL show that model availability cannot be determined
 - **AND** the system SHALL provide an actionable failure reason when one is available
 
+### Requirement: Startup model bootstrap and recovery
+The system SHALL initialize the model catalog as part of establishing the browser-to-bridge connection and SHALL expose a recoverable state when catalog loading is slow, rejected, or unavailable.
+
+#### Scenario: Bootstrap catalog after connection
+- **WHEN** the browser establishes a connection to the local bridge
+- **THEN** the local bridge SHALL push the current model catalog without requiring a separate user action
+- **AND** the browser SHALL populate the model selector from that catalog
+
+#### Scenario: Catalog command is rejected by an incompatible bridge
+- **WHEN** the browser receives a command rejection while the model catalog is loading
+- **THEN** the browser SHALL stop showing an indefinite loading state
+- **AND** the browser SHALL indicate that the Bridge must be restarted or upgraded
+- **AND** the browser SHALL provide a retry action
+
+#### Scenario: Catalog loading is slow
+- **WHEN** model discovery takes longer than the normal startup wait
+- **THEN** the browser SHALL continue to show a loading state with a bounded recovery path
+- **AND** the browser SHALL eventually show an actionable catalog failure instead of waiting indefinitely
+
+### Requirement: Local startup port reuse
+The one-click local development startup SHALL ensure that the current Bridge can bind its configured port even when a previous instance is already occupying that port.
+
+#### Scenario: Previous Bridge occupies the configured port
+- **WHEN** one-click startup detects an existing process listening on the configured Bridge port
+- **THEN** startup SHALL terminate that previous Bridge process
+- **AND** startup SHALL launch the current Bridge on the configured port
+- **AND** startup SHALL continue launching the web server without an `EADDRINUSE` terminal error
+
+#### Scenario: Port occupant is not the previous Bridge
+- **WHEN** one-click startup detects a process on the configured Bridge port that is not the project Bridge
+- **THEN** startup SHALL not silently terminate the unrelated process
+- **AND** startup SHALL show an actionable port-conflict error
+- **AND** startup SHALL not emit an unhandled server exception
+
 ### Requirement: Per-message model selection
 The system SHALL allow the user to select a catalog model for future prompts while preserving the active conversation, and SHALL bind each submitted prompt to the model selected at submission time.
 

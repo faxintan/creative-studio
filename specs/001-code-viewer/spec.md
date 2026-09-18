@@ -5,6 +5,12 @@
 **Status**: Draft
 **Input**: User description: "组一个类似vscode一样的代码查看器"
 
+## Clarifications
+
+### Session 2026-09-18
+
+- Q: 用户应通过什么方式选择要查看的本地工作区？ → A: 用户通过系统目录选择器显式选择一个本地工作区。
+
 ## User Scenarios & Testing
 
 ### User Story 1 - Open and Read a Workspace (Priority: P1)
@@ -20,8 +26,9 @@ can open the workspace, select a file, and read its content in the main viewer.
 
 **Acceptance Scenarios**:
 
-1. **Given** the user has selected a readable workspace, **When** the workspace opens,
-   **Then** the application displays its top-level folders and files in a file explorer.
+1. **Given** the user has access to a local directory, **When** the user selects it
+   through the system directory selector, **Then** the application opens the workspace
+   and displays its top-level folders and files in a file explorer.
 2. **Given** a readable file is visible in the explorer, **When** the user selects it,
    **Then** the application opens the file and displays its content with a clear file
    identity.
@@ -127,8 +134,9 @@ text, inspect result locations, and navigate to a selected match.
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST allow a user to select a local workspace and display its
-  readable folders and files in a hierarchical explorer.
+- **FR-001**: The system MUST provide a system directory selector that allows a user to
+  select a local workspace and display its readable folders and files in a hierarchical
+  explorer.
 - **FR-002**: The system MUST allow a user to expand and collapse folders while
   preserving the current explorer context.
 - **FR-003**: The system MUST allow a user to open a readable text file and display its
@@ -201,6 +209,7 @@ text, inspect result locations, and navigate to a selected match.
 - Terminal, debugger, build runner, source control operations, extensions, and
   language intelligence are out of scope for this feature.
 - The workspace is available to the application through the host environment's
-  permitted local-file access.
+  permitted local-file access after the user explicitly selects it through the system
+  directory selector.
 - The initial supported interface is desktop-oriented, with a narrow viewport fallback
   rather than a separate mobile workflow.

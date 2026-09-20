@@ -224,3 +224,17 @@ After T007-T016 are complete:
   browser-level validation remains a manual quickstart step in this feature.
 - Do not modify `spec.md` or `plan.md` to hide implementation gaps; append remaining
   work through `/speckit-converge`.
+
+## Phase 8: Convergence
+
+**Purpose**: Close the gaps found by comparing the implementation with the approved
+specification, plan, contracts, and constitution.
+
+- [ ] T053 [US4] Implement in-file match state, current-match highlighting, previous/next navigation, and viewer reveal in `apps/web/src/entities/search/model/`, `apps/web/src/widgets/search-panel/ui/search-panel.tsx`, and `apps/web/src/widgets/code-viewport/ui/code-viewport.tsx` per FR-010 and US4/AC1 (partial).
+- [ ] T054 [US1] Implement cursor-based directory pagination in `apps/web/src/pages/code-viewer/ui/code-viewer-page.tsx` and `apps/web/src/widgets/workspace-explorer/ui/workspace-explorer.tsx`, including a usable continuation state for directories beyond the first page per FR-008 and SC-004 (partial).
+- [ ] T055 [US1] Add a deterministic unreadable-file fixture and platform-safe permission setup/cleanup under `tests/fixtures/code-viewer-workspace/` and `tests/fixtures/scripts/`, then document its execution in `specs/001-code-viewer/quickstart.md` per FR-009 and US1/AC3 (missing).
+- [ ] T056 [US4] Thread `AbortSignal` through `apps/web/src/shared/api/bridge-client.ts`, `apps/web/src/pages/code-viewer/ui/code-viewer-page.tsx`, and `apps/bridge/src/infrastructure/search/search-files.ts` so cancelled searches stop transport/state work per plan cancellation decision and T039 (partial).
+- [ ] T057 [US3] Select and install a syntax-highlighting dependency or implement explicit language renderers, then map supported languages and plain-text fallback in `apps/web/src/entities/viewer/model/language-registry.ts` and `apps/web/src/widgets/code-viewport/ui/code-viewport.tsx` per FR-007 (partial).
+- [ ] T058 [US1-US4] Extract workspace opening, document management, viewer actions, and search actions from `apps/web/src/pages/code-viewer/ui/code-viewer-page.tsx` into the planned `apps/web/src/features/` slices and document the resulting import direction per the FSD architecture decision (partial).
+- [ ] T059 [P] Add Playwright configuration and critical browser journeys for workspace opening, document tabs, in-file/workspace search, and failure states under `tests/e2e/` per the constitution verification principle and plan testing decision (missing).
+- [ ] T060 [P] Reconcile the declared Vite/Zod versions in `specs/001-code-viewer/plan.md` with the installed versions in `apps/web/package.json` and `packages/contracts/package.json`, either aligning dependencies or recording an explicit technical decision (partial).

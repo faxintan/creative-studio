@@ -117,3 +117,19 @@ Expected result:
 | Readability and states | US3, FR-006 through FR-009, SC-006, SC-007 |
 | Search | US4, FR-010 through FR-013, SC-005 |
 | Scale and narrow viewport | FR-008, FR-015, SC-004, SC-005 |
+
+## Implementation Smoke Check
+
+**Run**: 2026-09-18
+
+The local Bridge was started with the fixture workspace and manually exercised through
+the HTTP contract:
+
+- Health response: `{"status":"ok"}`
+- Workspace creation: ready
+- Root tree: 6 entries returned
+- File content: `src/app.ts` read successfully
+- Workspace search: 7 matches for `workspace`
+
+Browser-level interaction and the scale scenarios remain pending until the full UI
+review is performed.

@@ -70,6 +70,23 @@ Creates a session workspace from the directory selected by the user.
 - `404 WORKSPACE_NOT_FOUND`
 - `409 WORKSPACE_NOT_READABLE`
 
+## POST `/workspaces/pick`
+
+Opens the host operating system's directory selector and creates a session workspace
+from the selected directory. This endpoint is available only to the local browser
+Origin or a request carrying the local access token.
+
+**Request**: No body.
+
+**Response `201`**: Same `workspace` object as `POST /workspaces`.
+
+**Errors**:
+
+- `400 INVALID_DIRECTORY_REFERENCE` when the picker is cancelled or unavailable
+- `403 ORIGIN_NOT_ALLOWED`
+- `404 WORKSPACE_NOT_FOUND`
+- `409 WORKSPACE_NOT_READABLE`
+
 ## GET `/workspaces/{workspaceId}/tree`
 
 Returns a bounded list of children for the workspace root or a directory.
@@ -154,6 +171,7 @@ Searches one active document or the workspace.
   "query": "workspace",
   "scope": "workspace",
   "path": null,
+  "documentId": null,
   "caseSensitive": false,
   "includeHidden": true,
   "limit": 200
@@ -186,6 +204,9 @@ Searches one active document or the workspace.
 
 - Empty queries return `200` with an empty result list and `truncated=false`.
 - Matching is literal and case-insensitive unless `caseSensitive=true`.
+- For `scope=document`, `path` is the canonical workspace-relative document identity;
+  `documentId` is a client-side correlation value and is not used for filesystem
+  resolution.
 - Results and preview lengths are bounded.
 - A search failure MUST NOT invalidate the active workspace or open document.
 

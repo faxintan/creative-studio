@@ -119,7 +119,8 @@ Represents one in-file or workspace search request.
 |-------|------|-------|
 | `query` | string | Required; bounded length; literal matching |
 | `scope` | `document \| workspace` | Required |
-| `documentId` | opaque string or null | Required for document scope |
+| `documentId` | opaque string or null | Client-side correlation value |
+| `path` | normalized relative path or null | Required for document scope; canonical Bridge identity |
 | `caseSensitive` | boolean | Defaults to false |
 | `includeHidden` | boolean | Defaults to the workspace visibility policy |
 | `status` | `idle \| searching \| complete \| error` | Required |

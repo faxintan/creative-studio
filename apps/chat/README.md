@@ -1,20 +1,21 @@
 # Chat
 
-Chat 应用的集中规划 store。当前已初始化，产品需求、负责人和实际实现仓库待确认；尚无业务主规范或活跃 change。
+The central planning store for the Chat application. The store is initialized; product requirements, ownership, and actual implementation repositories remain unconfirmed. There is no canonical business specification or active change yet.
 
-| 项目 | 约定 |
+| Item | Convention |
 | --- | --- |
 | Store ID | `creative-studio-chat` |
-| 规划根目录 | `apps/chat/` |
-| 集中式主规范 | `openspec/specs/chat/spec.md`（首个业务变更完成后生成） |
+| Planning root | `apps/chat/` |
+| Consolidated canonical specification | `openspec/specs/chat/spec.md`, created after the first completed behavior change |
 | Spec ID | `chat` |
-| 实现仓库 | 待确认；后续在此登记真实仓库 URL 和职责 |
-| 全局约定 | [AGENTS.md](../../AGENTS.md) |
-| 管理流程 | [workflow.md](../../docs/workflow.md) |
+| Implementation repositories | Unconfirmed; record actual repository URLs and responsibilities here once selected |
+| Repository rules | [AGENTS.md](../../AGENTS.md) |
+| Management workflow | [workflow.md](../../docs/workflow.md) |
+| Commit conventions | [commits.md](../../docs/commits.md); application scope `chat` is required |
 
-## 注册和操作
+## Registration and planning
 
-从中央仓库根目录注册：
+Register from the central repository root:
 
 ```bash
 openspec store register ./apps/chat
@@ -23,16 +24,18 @@ openspec list --store creative-studio-chat
 openspec new change add-chat-foundation --store creative-studio-chat
 ```
 
-`new change` 仅创建骨架，随后补齐 proposal、specs、design 和 tasks。主规范出现后可运行 `openspec show chat --type spec --store creative-studio-chat`；初始化阶段不存在主规范是正常状态。
+`new change` creates only a scaffold; produce the proposal, delta specification, design, and task plan next. Once the canonical specification exists, read it with `openspec show chat --type spec --store creative-studio-chat`. Its absence during initialization is expected.
 
-## 实现仓库接入
+Write documentation and planning artifacts in English. Application-related commits, including design, specification, documentation, and archive updates, must use scope `chat`, for example `feat(chat): define application behavior` or `docs(chat): clarify acceptance scenarios`.
 
-在已明确的 chat 实现仓库中仅保留以下 `openspec/config.yaml`：
+## Connecting implementation repositories
+
+In each confirmed Chat implementation repository, keep only this `openspec/config.yaml`:
 
 ```yaml
 store: creative-studio-chat
 ```
 
-规划产物仍写入中央 `apps/chat/openspec/changes/`。不要创建实现仓库本地的 specs/changes；如有已有规划，先按管理流程迁移。指针不自动分派任务，多个仓库接入时必须在中央 tasks 中明确职责。
+Planning artifacts remain in the central `apps/chat/openspec/changes/` directory. Do not create local specification or change directories in implementation repositories. Migrate existing planning using the management workflow before enabling the pointer. Store pointers do not dispatch tasks; name each implementation repository's responsibilities in the central task plan.
 
-实施会话需能访问中央 checkout 与目标代码仓库，并读取中央 AGENTS.md、本 README 和应用配置。`store.yaml` 的 remote 是整个中央 Git 仓库 URL，克隆后仍需注册 `apps/chat` 子目录，不能直接注册仓库根目录。
+Implementation sessions need access to both the central checkout and the selected code repository, along with the central AGENTS.md, this README, and application configuration. The remote in `store.yaml` is the central Git repository URL. After cloning, register `apps/chat`, not the repository root.

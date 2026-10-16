@@ -1,39 +1,41 @@
 # creative-studio
 
-集中管理不同应用的规范、设计、变更计划和归档。采用 monorepo 式目录组织：一个 Git 仓库，按应用划分独立 OpenSpec store，实际代码和测试位于应用实现仓库。
+A central planning repository for application specifications, designs, change plans, and archives. One Git repository contains an independent OpenSpec store for each application, using a monorepo-style directory layout. Application code and tests live in separate implementation repositories.
 
-## 应用索引
+## Application index
 
-| 应用 | Store ID | 规划根目录 | 主规范路径（首个业务变更完成后生成） | 状态 |
+| Application | Store ID | Planning root | Canonical specification (created after the first completed behavior change) | Status |
 | --- | --- | --- | --- | --- |
-| [Chat](apps/chat/README.md) | `creative-studio-chat` | `apps/chat/` | `apps/chat/openspec/specs/chat/spec.md` | 已初始化，需求待定义 |
-| [Note](apps/note/README.md) | `creative-studio-note` | `apps/note/` | `apps/note/openspec/specs/note/spec.md` | 已初始化，需求待定义 |
+| [Chat](apps/chat/README.md) | `creative-studio-chat` | `apps/chat/` | `apps/chat/openspec/specs/chat/spec.md` | Initialized; requirements not yet defined |
+| [Note](apps/note/README.md) | `creative-studio-note` | `apps/note/` | `apps/note/openspec/specs/note/spec.md` | Initialized; requirements not yet defined |
 
-应用实现仓库尚未指定，确认后登记在应用 README 中。Store ID 是本机注册名称，不是仓库 URL；每个 ID 对应一个应用目录。
+Implementation repositories have not been selected. Record their actual URLs and responsibilities in the application README once confirmed. A store ID is a machine-local registration name, not a repository URL; each ID resolves to one application directory.
 
-## 目录结构
+## Repository layout
 
 ```text
 creative-studio/
-├── AGENTS.md                    全仓库操作约定
-├── .agents/skills/              共用 Codex OpenSpec 工作流
-├── docs/workflow.md             接入、规划、实施、归档和新增应用流程
+├── AGENTS.md                    Repository operating rules
+├── .agents/skills/              Shared Codex OpenSpec workflows
+├── docs/
+│   ├── workflow.md             Setup, planning, implementation, and archival
+│   └── commits.md              Commit format and required application scopes
 └── apps/
     ├── chat/
-    │   ├── README.md            应用说明、实现仓库与接入方式
+    │   ├── README.md            Application ownership, repositories, and setup
     │   ├── .openspec-store/store.yaml
     │   └── openspec/
-    │       ├── config.yaml      应用规划规则
-    │       ├── specs/           应用集中式主规范
-    │       └── changes/         活跃变更与 archive/
-    └── note/                    与 chat 相同的结构
+    │       ├── config.yaml      Application planning rules
+    │       ├── specs/           Canonical application specification
+    │       └── changes/         Active changes and archive/
+    └── note/                    Same structure as chat
 ```
 
-仓库根目录不再是 OpenSpec store，不保留根级 `openspec/`。各应用共用此仓库的 Git 历史，不创建嵌套 `.git`。规范先按应用集中在一个 `spec.md` 中管理，仅在内容规模或并行协作确有需要时拆分。
+The repository root is not a store and has no root-level `openspec/` directory. Application directories share this repository's Git history without nested Git repositories. Start with one canonical `spec.md` per application; split it only when document size or concurrent work warrants it.
 
-## 本机接入
+## Local setup
 
-当前结构使用 OpenSpec `1.14.2` 验证。Stores 为 beta 功能，升级前检查命令和格式兼容性。
+This layout has been verified with OpenSpec `1.14.2`. Stores are a beta feature; check command and format compatibility before upgrading.
 
 ```bash
 npm install -g @fission-ai/openspec@1.14.2
@@ -45,20 +47,20 @@ openspec doctor --store creative-studio-chat
 openspec doctor --store creative-studio-note
 ```
 
-已有 checkout 直接注册所需应用即可。注册信息保存在本机，不提交到仓库；不需要为所有机器设置全局 `defaultStore`。从旧的根 store 布局升级，参见[迁移说明](docs/workflow.md#从旧根-store-迁移)。
+For an existing checkout, register only the applications you need. Registration is machine-local and is not committed. A global `defaultStore` is not required. For the previous root-store layout, see [migration instructions](docs/workflow.md#migrating-from-the-root-store).
 
-实现仓库选择对应应用，且只保留指针配置。例如 chat 的实现仓库：
+Each implementation repository keeps only a store pointer in its OpenSpec directory. For Chat:
 
 ```yaml
-# 实现仓库中的 openspec/config.yaml
+# openspec/config.yaml in the implementation repository
 store: creative-studio-chat
 ```
 
-Note 使用 `store: creative-studio-note`。实现仓库不维护本地 `openspec/specs/` 或 `openspec/changes/`；多个实现仓库可指向同一应用 store。
+Note uses `store: creative-studio-note`. Implementation repositories keep no local `openspec/specs/` or `openspec/changes/` directories. Multiple implementation repositories may point to the same application store.
 
-## 日常管理
+## Daily workflow
 
-从本仓库根目录操作时显式指定应用：
+From the central repository root, select the application explicitly:
 
 ```bash
 openspec list --store creative-studio-chat
@@ -67,8 +69,12 @@ openspec status --change add-streaming --store creative-studio-chat
 openspec validate add-streaming --strict --store creative-studio-chat
 ```
 
-`new change` 仅创建骨架。随后使用 Codex 的 `$openspec-propose` 完成规划；已有骨架时明确要求继续该 change。其余核心技能为 `$openspec-explore`、`$openspec-apply-change`、`$openspec-update-change`、`$openspec-sync-specs`、`$openspec-archive-change`。在桌面端通过 Skills 选择对应技能，并明确应用 store。
+`new change` creates only a scaffold. Use Codex's `$openspec-propose` to produce the planning artifacts; explicitly continue the existing change if you already created its scaffold. Other core skills are `$openspec-explore`, `$openspec-apply-change`, `$openspec-update-change`, `$openspec-sync-specs`, and `$openspec-archive-change`. In the desktop app, select the skill from Skills and identify the application store.
 
-管理流程为：**选择应用 → 创建并评审 change → 各实现仓库实施 → 联调验收 → 合并规范并归档 → 提交中央 Git 变更**。详细操作见[管理流程](docs/workflow.md)，Agent 操作前先读取 [AGENTS.md](AGENTS.md)。
+The lifecycle is: select an application, create and review a change, implement in the assigned repositories, complete integration acceptance, synchronize specifications and archive the change, then commit the central updates. See the [management workflow](docs/workflow.md); agents must read [AGENTS.md](AGENTS.md) before operating.
 
-OpenSpec 不自动分派跨仓库任务、不自动聚合所有应用，也不执行 Git 同步或发布。应用隔离是规划根目录隔离，仓库访问权限仍由 Git 托管平台控制。
+## Language and commits
+
+Use precise English for maintained documentation, specifications, planning artifacts, and commit messages. Application-related commits require an application scope, including design and specification changes: `feat(chat): define streaming response behavior`. See [Commit Conventions](docs/commits.md) for documentation-only changes, archives, and multi-application commits.
+
+OpenSpec does not dispatch cross-repository tasks, aggregate all applications, synchronize Git repositories, or deploy applications. Application stores isolate planning roots; repository access is controlled by the Git hosting platform.

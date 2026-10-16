@@ -1,48 +1,56 @@
-# 全仓库操作约定
+# Repository Operating Rules
 
-## 仓库职责
+## Repository responsibilities
 
-- 本仓库集中存放应用规范、proposal、design、tasks、评审证据和归档；应用代码、应用测试、运行配置和构建产物保存在明确指定的实现仓库。
-- 先读取根 README 的应用索引、目标应用 README 和该应用的 `openspec/config.yaml`。
-- `apps/chat` 对应 `creative-studio-chat`；`apps/note` 对应 `creative-studio-note`。根目录本身不是 store。
+- This repository owns application specifications, proposals, designs, task plans, review evidence, and change archives. Application source code, tests, runtime configuration, and build output belong in explicitly selected implementation repositories.
+- Read the root application index, the target application's README, and its `openspec/config.yaml` before application work.
+- `apps/chat` is store `creative-studio-chat`; `apps/note` is store `creative-studio-note`. The repository root is not an OpenSpec store.
+- Write maintained documentation, specifications, planning artifacts, and commit messages in precise English. Preserve technical identifiers and OpenSpec's required headings and keywords.
 
-## 选择规划根目录
+## Selecting a planning root
 
-- 在任何规划写入前确认应用。应用不明确时询问；不得默认选择 chat、note 或创建根级 `openspec/`。
-- 在中央仓库操作支持 `--store` 的命令时始终携带目标 store：先运行 `openspec context --store <store-id> --json`，确认 `root.path` 是预期的应用目录。
-- Store 未注册时，按应用 README 注册对应子目录。注册失败时诊断实际错误，不得通过初始化仓库根目录或设置全局 `defaultStore` 绕过。
-- `init`、`update` 等集成维护命令及不支持 `--store` 的命令，以当前 CLI 帮助为准，显式选定应用目录。不得在中央仓库根目录运行 `openspec init`；共用技能位于 `.agents/skills/`，它们不是根 store 的证明。
-- 每个应用是独立 OpenSpec 根目录，配置不会从根目录或兄弟应用自动继承。
+- Identify the application before writing planning artifacts. Ask when it is ambiguous; do not silently choose an application or create a root-level `openspec/` directory.
+- In this central repository, always pass the application store to commands that support `--store`. First run `openspec context --store <store-id> --json` and verify that `root.path` is the intended application directory.
+- Register missing stores using the application's README. Diagnose registration failures rather than initializing the repository root or setting a global `defaultStore` as a workaround.
+- For integration maintenance commands such as `init` and `update`, and commands without `--store`, check the installed CLI's help and explicitly select the application directory. Never run `openspec init` at the central repository root. Shared skills in `.agents/skills/` do not make that directory a store.
+- Each application has an independent OpenSpec root. Configuration is not automatically inherited from the repository root or sibling applications.
 
-## 规范与变更
+## Specifications and changes
 
-- 每个应用先集中维护 `apps/<app>/openspec/specs/<app>/spec.md`。不要在需求未确认时填充示例产品要求，也不要提前拆分每个细小能力。
-- 主规范描述当前有效行为，使用 `## Purpose`、`## Requirements`、`### Requirement:`、`#### Scenario:` 结构；要求使用 SHALL/MUST 等明确关键词，场景可验收。
-- 新增或改变行为先建立 change；变化使用 ADDED/MODIFIED/REMOVED/RENAMED delta。保留应用的完整 spec ID，首次新增主规范使用 ADDED。
-- proposal 写明应用、实际实现仓库、范围、非目标、中央规划版本和跨仓库依赖。实现仓库未指定时明确待确认，不猜测真实仓库名或 URL。
-- design 记录接口契约、兼容性、实施顺序、异常与回退方案；tasks 中每个实施任务注明目标仓库，并包含测试和联调验收。
-- 规划产物状态完成只表示文件存在，不代表实现完成。只有相关工作完成且有验证证据时才勾选任务。
-- 活跃 change 的需求调整同步修订相关产物；归档后的行为变化创建新 change。并行变更修改相同要求时，归档前对比最新主规范并解决冲突。
+- Initially keep each application's canonical specification in `apps/<app>/openspec/specs/<app>/spec.md`. Do not invent requirements or split small capabilities into separate files before a real need exists.
+- Canonical specifications describe the current accepted behavior using `## Purpose`, `## Requirements`, `### Requirement:`, and `#### Scenario:`. Requirements must use explicit terms such as SHALL or MUST and have verifiable scenarios.
+- Create a change before adding or changing behavior. Use ADDED, MODIFIED, REMOVED, and RENAMED deltas as appropriate. Preserve the application's spec ID; use ADDED requirements to create its first canonical specification.
+- Proposals identify the application, actual implementation repositories, scope, non-goals, planning revision, and cross-repository dependencies. Mark unknown repositories as unconfirmed instead of inventing names or URLs.
+- Designs describe contracts, compatibility, implementation order, failure handling, and rollback. Implementation tasks name their target repository and include repository tests and integration acceptance checks.
+- Completed planning artifacts do not prove implementation completion. Check off a task only after its work is complete and verification evidence is available.
+- Keep active-change artifacts consistent when requirements evolve. Create a new change for behavior changes after archival. Reconcile concurrent changes against the latest canonical specification before archiving.
 
-## 实施与跨应用协作
+## Implementation and coordination
 
-- 应用实现仓库仅以 `store: creative-studio-<app>` 接入，不再创建本地 specs/changes。若已存在本地规划，先检查并迁移，不能直接删除以启用指针。
-- 指针仅选择规划位置，不自动分派任务，也不代表可以编辑所有实现仓库。实施前明确当前目标仓库，仅读取并执行属于它的任务。
-- 让 Agent 同时访问应用 store 和选定实现仓库，并在实现会话中提供本文件、应用 README 与配置中的相关约束；中央 AGENTS.md 不会自动约束仓库之外的代码目录。
-- 中央变更与实现 PR 相互记录 change ID、规划提交号、实现 PR 和验证结果。使用 CLI 返回的 `planningHome`、`changeRoot`、`actionContext` 确认路径与范围。
-- 跨应用需求在各应用 store 创建关联 change，相互记录依赖和验收顺序；应用共用 Git 分支，不具有独立分支切换或权限边界。
+- Implementation repositories use `store: creative-studio-<app>` and keep no local specification or change directories. Inspect and migrate existing local planning before removing it to enable a pointer.
+- A store pointer selects the planning location. It neither dispatches tasks nor authorizes edits to every implementation repository. Identify the current target repository and execute only its assigned tasks.
+- Make the application store and selected implementation repository available to the agent. Supply this file, the application README, and relevant application configuration to implementation sessions; this AGENTS.md is not automatically applied outside the central repository.
+- Link central changes and implementation PRs using the change ID, planning commit, implementation PR, and verification results. Use CLI-returned `planningHome`, `changeRoot`, and `actionContext` to verify paths and scope.
+- For cross-application work, create linked changes in the affected application stores and document dependencies and acceptance order. Applications share a Git checkout and branch; store separation is not a branch or access-control boundary.
 
-## 验证与归档
+## Validation and archival
 
-- 修改规划后运行目标 store 的严格校验；修改共用管理规则时检查所有受影响应用。不要把空 store 的零项校验当成业务验收。
-- 归档前核对规划完整性、任务勾选、实现 PR 状态、测试和联调证据；遵守本应用 config 的 archive guidance。
-- 正常业务归档先合并 delta 至本应用主规范，再移入本应用的 archive。不要为绕过合并问题使用 `--skip-specs` 或修改既有归档。
-- 归档由 Agent 执行时读取当前 instructions 和目标路径，使用官方归档/同步工作流；CLI 不会替代实际实现验收。
-- 规则与 guidance 是 Agent 指导，不是强制执行器。不得宣称 OpenSpec 自动验证了代码、权限、Git 合并或发布。
+- Run strict validation for the affected store after planning changes. Check every affected application when shared rules change. An empty store's zero-item validation is not product acceptance evidence.
+- Before archival, verify planning completeness, task completion, implementation PR status, tests, and integration evidence. Consider the application's archive guidance.
+- For normal behavior changes, merge deltas into that application's canonical specification before moving the change to its archive. Do not use `--skip-specs` to bypass a merge problem or rewrite historical archives.
+- Agent-driven archival must read current instructions and resolved paths and follow the official archive/sync workflows. CLI validation does not replace implementation acceptance.
+- Context, rules, and operation guidance guide agent behavior; they are not an enforcement mechanism for code correctness, permissions, Git merges, or deployment.
 
-## Git 与维护
+## Commits
 
-- 所有应用使用当前中央 Git 仓库；应用目录内不得创建 `.git`。保留已有用户修改，不擅自提交、推送或清理未知文件。
-- `.gitkeep` 用于让空 specs/archive 目录随克隆保留。不要提交机器注册表、workset 绝对路径或临时验证 change。
-- 新增应用遵循 `docs/workflow.md`，同步更新根应用索引，并给它独立 store 身份、配置和 README。
-- `.agents/skills/openspec-*` 及 `.openspec-target` 由 OpenSpec 生成；自定义规则写在本文件、应用 README 和应用配置中。
+- Follow [Commit Conventions](docs/commits.md). Every commit that changes application planning, design, specifications, configuration, documentation, tasks, or archives MUST include an application scope.
+- For one application, use its directory ID: `feat(chat): define streaming response behavior` or `docs(note): clarify acceptance scenarios`. An unscoped subject or the wrong application scope is invalid even for documentation-only changes under `apps/<app>/`.
+- Split independent application changes into separate commits. For an inseparable multi-application change, use scope `apps` and list the affected IDs in an `Apps: chat, note` body line.
+- Shared repository-only changes may use scope `repo`. Do not use `repo` to conceal application changes. Reference existing application change IDs in the body when applicable.
+
+## Git and maintenance
+
+- All applications share this Git repository. Do not create nested `.git` directories. Preserve existing user changes; commit and push only when authorized, and do not remove unknown files.
+- Keep `.gitkeep` files so empty specification and archive directories survive cloning. Do not commit machine registries, absolute workset paths, or temporary validation changes.
+- Add applications using `docs/workflow.md`, update the root index, and provide a separate store identity, configuration, and README.
+- OpenSpec owns `.agents/skills/openspec-*` and `.openspec-target`. Keep custom instructions in this file, application READMEs, and application configuration.

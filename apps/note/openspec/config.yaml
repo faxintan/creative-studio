@@ -1,34 +1,42 @@
 schema: spec-driven
 
 context: |
-  本规划根目录只管理 note 应用，store ID 为 creative-studio-note。
-  它位于 creative-studio 中央管理仓库的 apps/note；实现代码和测试保存在外部实现仓库。
-  主规范集中维护于 openspec/specs/note/spec.md，当前业务需求和实际实现仓库尚未指定。
-  未确认需求时保持 specs 为空，首个业务 change 经实施验收和归档后生成主规范。
-  本应用的 delta 使用 specs/note/spec.md，不要按细小功能提前拆分规范。
-  操作前读取中央 AGENTS.md 和本应用 README；实现会话中也要提供这些约束。
-  本配置不会自动继承兄弟应用配置，所有 change 与归档均属于 note store。
-  规范和变更正文默认使用中文，保留 OpenSpec 的标准英文结构标题和 SHALL/MUST 关键词。
+  This planning root manages only the note application in store creative-studio-note.
+  It is apps/note in the creative-studio central repository. Source code and tests
+  belong in external implementation repositories.
+  Keep the canonical specification consolidated at openspec/specs/note/spec.md.
+  Product requirements and actual implementation repositories have not yet been selected.
+  Leave specs empty until requirements are confirmed; create the first canonical
+  specification when its behavior change has been implemented, accepted, and archived.
+  Change deltas use specs/note/spec.md. Do not split specifications by small features prematurely.
+  Read the central AGENTS.md and application README; supply their constraints to implementation sessions.
+  This configuration does not inherit from sibling applications. Changes and archives belong to this store.
+  Write documentation, specifications, and planning artifacts in precise English,
+  preserving OpenSpec's required headings and SHALL/MUST keywords.
+  Application-related commits MUST use the note scope, including design, specification,
+  documentation, configuration, task, and archive updates. Follow docs/commits.md
+  in the central repository for inseparable multi-application changes.
 
 rules:
   proposal:
-    - 明确 note 应用的行为变化、范围、非目标、实际实现仓库和跨仓库依赖；未知仓库明确待确认。
-    - 引用实际读取的中央 Git 提交号；有未提交规划时如实说明，实施交接前提交并记录版本。
+    - Identify the note behavior change, scope, non-goals, actual implementation repositories, and cross-repository dependencies. Mark unknown repositories as unconfirmed.
+    - Cite the central Git revision actually inspected. Disclose uncommitted planning and record a committed revision before implementation handoff.
   specs:
-    - 使用 specs/note/spec.md 集中描述应用可观察行为；每个要求包含可验收场景，遵循标准 delta 与主规范格式。
-    - 首次能力使用 ADDED，修改已有要求使用 MODIFIED 并保留仍有效的场景；不复制配置规则到规范正文。
+    - Consolidate observable application behavior in specs/note/spec.md with verifiable scenarios and the standard delta or canonical format as appropriate.
+    - Use ADDED for new requirements and MODIFIED for existing requirements, retaining valid scenarios. Do not copy configuration rules into the specification.
   design:
-    - 明确实现仓库职责、接口契约、兼容性、联调顺序和失败或回退处理。
+    - Define repository responsibilities, contracts, compatibility, integration order, failure handling, and rollback.
   tasks:
-    - 每个实施任务注明目标实现仓库，并包括该仓库的测试、跨仓库联调和验收证据记录。
-    - 只描述外部实现工作，不安排向中央管理仓库添加应用代码；验证成功后才勾选任务。
+    - Identify the target repository for each implementation task and include repository tests, integration acceptance, and verification evidence.
+    - Describe external implementation work only. Do not plan application source code in this central repository, and check off tasks only after successful verification.
 
 operations:
   apply:
     guidance:
-      - 本 store 仅为规划根目录；实施前明确目标实现仓库，只执行属于它的任务，并将完成证据回填中央 change。
-      - 实现仓库不明确或不可访问时先确认；不要在 apps/note 中创建应用实现代码。
+      - This store is the planning root only. Identify the implementation repository, execute only its assigned tasks, and record completion evidence in the central change.
+      - Confirm an unspecified or inaccessible implementation repository before proceeding. Do not create application code under apps/note.
   archive:
     guidance:
-      - 确认相关实现仓库已完成任务、测试和联调验收，记录实现 PR 和验证结果后再归档。
-      - 将业务 delta 合并到本 store 的 openspec/specs/note/spec.md，归档保存在本 store 的 changes/archive 中。
+      - Verify implementation completion, tests, and integration acceptance across affected repositories, and record PRs and results before archiving.
+      - Merge business deltas into this store's openspec/specs/note/spec.md and archive the change under this store's changes/archive directory.
+      - When committing an authorized archive update, use the note application scope and reference its change ID.
